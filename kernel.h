@@ -2,6 +2,7 @@
 
 #include "metal.h"
 
+void bench_mark_cpu_matmul(int m, int n, int k);
 
 void bench_mark_mps_gemm(int m, int n, int k);
 

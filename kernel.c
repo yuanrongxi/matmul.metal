@@ -69,6 +69,42 @@ static void release_buffer(metal_buffer_t* A, metal_buffer_t* B, metal_buffer_t*
 }
 
 #define BENCH_MARK_COUNT 100
+
+void bench_mark_cpu_matmul(int m, int n, int k) {
+    metal_buffer_t A;
+    metal_buffer_t B;
+    metal_buffer_t C;
+    metal_buffer_t C_cpu;
+
+    metal_device_t device;
+    if(metal_device_create(&device) != gemm_success) {
+        printf("failed to create Metal device\n");
+        return;
+    }
+
+    init_buffer(&device, &A, &B, &C, &C_cpu, m, n, k);
+
+    double cost_sec = 0;
+    uint64_t start = get_time_us();
+    cpu_gemm_v1((float*)A.ptr, (float*)B.ptr, (float*)C_cpu.ptr, m, n, k);
+    uint64_t end = get_time_us();
+    cost_sec = (double)(end - start);
+
+    double avg_time = cost_sec;
+    double gflops = (2.0 * m * n * k) * 1000000.0 / (avg_time * 1024 * 1024 * 1024);
+    printf("CPU Native matmul: %.3f us (%.3f GFLOPS)\n", avg_time, gflops);
+
+    start = get_time_us();
+    cpu_gemm_v2((float*)A.ptr, (float*)B.ptr, (float*)C_cpu.ptr, m, n, k, 16);
+    end = get_time_us();
+    cost_sec = (double)(end - start);
+    avg_time = cost_sec;
+    gflops = (2.0 * m * n * k) * 1000000.0 / (avg_time * 1024 * 1024 * 1024);
+    printf("CPU Tiling matmul: %.3f us (%.3f GFLOPS)\n", avg_time, gflops);
+
+    release_buffer(&A, &B, &C, &C_cpu);
+    metal_device_release(&device);
+}
 void bench_mark_mps_gemm(int m, int n, int k) {
     metal_buffer_t A;
     metal_buffer_t B;
@@ -127,12 +163,7 @@ void bench_mark_mps_gemm(int m, int n, int k) {
     double gflops = (2.0 * m * n * k) / (avg_time * 1024 * 1024 * 1024);
      printf("MPS matmul: %.3f us (%.3f GFLOPS)\n", avg_time * 1000000.0, gflops);
 
-    uint64_t start = get_time_us();
     cpu_gemm_v2((float*)A.ptr, (float*)B.ptr, (float*)C_cpu.ptr, m, n, k, 16);
-    uint64_t end = get_time_us();
-    double cpu_time = (double)(end - start);
-    double cpu_gflops = (2.0 * m * n * k)*1000000.0 / (cpu_time * 1024 * 1024 * 1024);
-    printf("CPU matmul: %.3f us (%.3f GFLOPS)\n", cpu_time, cpu_gflops);
 
     validate_gemm_result((float*)C.ptr, (float*)C_cpu.ptr, m, n);
 

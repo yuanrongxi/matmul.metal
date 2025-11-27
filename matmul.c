@@ -6,8 +6,8 @@ void cpu_gemm_v1(float* a, float* b, float* c, int m, int n, int k) {
     int i;
     #pragma omp parallel for private(i)
     for(i = 0; i < m; i++) {
-        for(int j = 0; j < n; j++) {
-            for(int l = 0; l < k; l++) {
+        for(int l = 0; l < k; l++) {
+            for(int j = 0; j < n; j++) {
                 c[i * n + j] += a[i * k + l] * b[l * n + j];
             }
         }

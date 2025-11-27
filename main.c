@@ -4,6 +4,7 @@
 #include <getopt.h>
 
 static void run() {
+    bench_mark_cpu_matmul(1024, 1024, 1024);
     bench_mark_mps_gemm(1024, 1024, 1024);
     bench_mark_metal_matmul_v1(1024, 1024, 1024);
     bench_mark_metal_matmul_v2(1024, 1024, 1024);
