@@ -26,7 +26,7 @@ make
 | 5: Metal 1D Blocktiling             | `1126.7` | 36.4%                          |
 | 7: Metal 2D Blocktiling             | `2168.9` | 70.2%                          |
 | 6: Metal Vectorized Mem Access      | `2334.2` | 75.5%                          |
-| 8: Warptiling                       | `2129.3` | 68.9%                          |
+| 8: SIMD Warptiling                  | `2129.3` | 68.9%                          |
 | 9: python numpy(GPU)                | `1295.3` | 41.9%                          |
 | 0: Metal Performance Shaders(MPS)   | `3091.5` | 100.0%                         |
 <!-- benchmark_results -->
