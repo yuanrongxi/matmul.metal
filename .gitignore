@@ -1,0 +1,22 @@
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+CMakeConfigureLog.yaml
+InstallScripts.json
+
+# Build artifacts
+*.o
+*.a
+*.metallib
+*.air
+
+# Executables
+matmul
+
+# System
+.DS_Store
+
+# IDE
+.vscode/

@@ -19,3 +19,17 @@ void bench_mark_metal_matmul_v5(int m, int n, int k);
 void bench_mark_metal_matmul_v6(int m, int n, int k);
 
 void bench_mark_metal_matmul_v7(int m, int n, int k);
+
+void bench_mark_cpu_softmax(int n);
+
+void bench_mark_online_softmax(int n);
+
+void bench_mark_metal_softmax_v1(int n);
+
+void bench_mark_metal_softmax_v2(int n);
+
+void bench_mark_metal_softmax_v3(int n);
+
+void bench_mark_metal_softmax_online(int n);
+
+void bench_mark_metal_softmax_online_v2(int n);

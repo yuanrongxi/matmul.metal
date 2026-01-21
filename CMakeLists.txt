@@ -21,6 +21,7 @@ find_library(MPS_FRAMEWORK        MetalPerformanceShaders REQUIRED)
 
 set(METAL_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/matmul.metal
+    ${CMAKE_CURRENT_SOURCE_DIR}/softmax.metal
 )
 set(METAL_LIB default.metallib)
 
@@ -28,8 +29,9 @@ include_directories(BEFORE include ${CMAKE_CURRENT_SOURCE_DIR})
 add_custom_command(
     OUTPUT  ${CMAKE_CURRENT_BINARY_DIR}/${METAL_LIB}
     COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/"
-    COMMAND xcrun -sdk macosx metal -g "-I${CMAKE_CURRENT_SOURCE_DIR}" -c "${CMAKE_CURRENT_SOURCE_DIR}/matmul.metal" -o "${CMAKE_CURRENT_BINARY_DIR}/matmul.air"
-    COMMAND xcrun -sdk macosx metallib "${CMAKE_CURRENT_BINARY_DIR}/matmul.air" -o "${CMAKE_CURRENT_BINARY_DIR}/${METAL_LIB}"
+    COMMAND xcrun -sdk macosx metal -g "-I${CMAKE_CURRENT_SOURCE_DIR}" -c "${CMAKE_CURRENT_SOURCE_DIR}/matmul.metal"  -o "${CMAKE_CURRENT_BINARY_DIR}/matmul.air"
+    COMMAND xcrun -sdk macosx metal -g "-I${CMAKE_CURRENT_SOURCE_DIR}" -c "${CMAKE_CURRENT_SOURCE_DIR}/softmax.metal"  -o "${CMAKE_CURRENT_BINARY_DIR}/softmax.air"
+    COMMAND xcrun -sdk macosx metallib "${CMAKE_CURRENT_BINARY_DIR}/matmul.air" "${CMAKE_CURRENT_BINARY_DIR}/softmax.air" -o "${CMAKE_CURRENT_BINARY_DIR}/${METAL_LIB}" 
     DEPENDS ${METAL_SOURCES}
     COMMENT "Compiling Metal compute library"
 )

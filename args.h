@@ -47,3 +47,19 @@ typedef matmul_v1_args_t matmul_v6_args_t;
 #define WSUBN (WN / WNITER)
 
 typedef matmul_v1_args_t matmul_v7_args_t;
+
+
+typedef struct softmax_v1_args {
+    uint32_t n;
+} softmax_v1_args_t;
+
+#define SOFTMAX_BLOCK_SIZE 256
+
+typedef softmax_v1_args_t softmax_v2_args_t; // alias for v1
+
+#define SOFTMAX_V3_BLOCK_SIZE 1024
+#define V3_BUFF_LEN (SOFTMAX_V3_BLOCK_SIZE / WARPSIZE)
+typedef softmax_v1_args_t softmax_v3_args_t; // alias for v1
+
+typedef softmax_v1_args_t softmax_v4_args_t; // alias for v1
+typedef softmax_v1_args_t softmax_v5_args_t; // alias for v1

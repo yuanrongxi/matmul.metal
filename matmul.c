@@ -1,4 +1,5 @@
 #include <omp.h>
+#include <math.h>
 #include "types.h"
 #include "matmul.h"
 
@@ -29,5 +30,43 @@ void cpu_gemm_v2(float* a, float* b, float* c, int m, int n, int k, int tile_siz
                 }
             }
         }
+    }
+}
+
+void cpu_softmax(const float* in, float* out, int n) {
+    float maxval = in[0];
+    for(int i = 1; i < n; i++) {
+        if(maxval < in[i]) {
+            maxval = in[i];
+        }
+    }
+
+    double sum = 0.0f;
+    for(int i = 0; i < n; i++) {
+        out[i] = expf(in[i] - maxval);
+        sum += out[i];
+    }
+
+    float norm = 1.0f / sum;
+    for(int i = 0; i < n; i++) {
+        out[i] *= norm;
+    }
+}
+
+void cpu_online_softmax(const float* in, float* out, int n) {
+    float maxval = -INFINITY;
+    double sum = 0.0f;
+    for(int i = 0; i < n; i++) {
+        if(maxval < in[i]) {
+            float prev_maxval = maxval;
+            maxval = in[i];
+            sum = sum * expf(prev_maxval - maxval) + expf(in[i] - maxval);
+        } else {
+            sum += expf(in[i] - maxval);
+        }
+    }
+
+    for(int i = 0; i < n; i++) {
+        out[i] = expf(in[i] - maxval) / sum;
     }
 }

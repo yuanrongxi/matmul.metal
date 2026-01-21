@@ -15,6 +15,9 @@ static const float bias = 0.0f * 0.5f;
 typedef enum gemm_status (*metal_matmul_func_t)(metal_command_buffer_t* command_buffer, metal_function_t* function, 
     int m, int n, int k, metal_buffer_t* A, metal_buffer_t* B, metal_buffer_t* C);
 
+typedef enum gemm_status (*metal_softmax_func_t)(metal_command_buffer_t* command_buffer, metal_function_t* function, 
+    int n, metal_buffer_t* in, metal_buffer_t* out);
+
 static inline void generate_random_f32(float* d, size_t size){
     for(size_t i = 0; i < size; i++) {
         int val = (int)(rng_random(i, seed));
@@ -50,13 +53,11 @@ static void init_buffer(metal_device_t* device,
     }
 }
 
-static void validate_gemm_result(float* c, float* c_cpu, int m, int n) {
-    for(size_t i = 0; i < m; i++) {
-        for(size_t j = 0; j < n; j++) {
-            if (fabs(c[i * n + j] - c_cpu[i * n + j]) >1e-3f) {
-                printf("error at %zu, %zu: %f != %f\n", i, j, c[i * n + j], c_cpu[i * n + j]);
-                return;
-            }
+static void validate_gemm_result(float* c, float* c_cpu, int n) {
+    for(size_t i = 0; i < n; i++) {
+        if (fabs(c[i] - c_cpu[i]) > 1e-3f) {
+            printf("error at %zu: %f != %f\n", i, c[i], c_cpu[i]);
+            return;
         }
     }
 }
@@ -165,7 +166,7 @@ void bench_mark_mps_gemm(int m, int n, int k) {
 
     cpu_gemm_v2((float*)A.ptr, (float*)B.ptr, (float*)C_cpu.ptr, m, n, k, 16);
 
-    validate_gemm_result((float*)C.ptr, (float*)C_cpu.ptr, m, n);
+    validate_gemm_result((float*)C.ptr, (float*)C_cpu.ptr, m * n);  
 
     metal_mps_matrix_release(&A_mps);
     metal_mps_matrix_release(&B_mps);
@@ -254,8 +255,8 @@ static void run_metal_matmul(metal_matmul_func_t func, const char* name, int m, 
     printf(" %s: %.3f us (%.3f GFLOPS)\n", name, avg_time * 1000000.0, gflops);
     
     cpu_gemm_v2((float*)A.ptr, (float*)B.ptr, (float*)C_cpu.ptr, m, n, k, 16);
-    validate_gemm_result((float*)C.ptr, (float*)C_cpu.ptr, m, n);
-
+    validate_gemm_result((float*)C.ptr, (float*)C_cpu.ptr, m * n);
+        
     release_buffer(&A, &B, &C, &C_cpu);
     release_metal(&device, &library, &function, &command_queue);
 } 
@@ -492,4 +493,239 @@ static enum gemm_status metal_command_buffer_matmul_v7(metal_command_buffer_t* c
 
 void bench_mark_metal_matmul_v7(int m, int n, int k) {
     run_metal_matmul(metal_command_buffer_matmul_v7, "metal_matmul_v7", m, n, k);
+}
+
+
+static void init_softmax_buffer(metal_device_t* device, metal_buffer_t* in, metal_buffer_t* out, metal_buffer_t* C_cpu, int n) {
+    metal_buffer_create(device, n * sizeof(float), NULL, in);
+    metal_buffer_create(device, n * sizeof(float), NULL, out);
+    metal_buffer_create(device, n * sizeof(float), NULL, C_cpu);
+
+    float* in_prtr = (float*)in->ptr;
+    generate_random_f32(in_prtr, n);
+
+    float* out_prtr = (float*)out->ptr;
+    float* cpu_prtr = (float*)C_cpu->ptr;
+    for(int i = 0; i < n; i++){
+        out_prtr[i] = 0.0f;
+        cpu_prtr[i] = 0.0f;
+    }
+}
+
+static void release_softmax_buffer(metal_buffer_t* in, metal_buffer_t* out, metal_buffer_t* C_cpu) {
+    metal_buffer_release(in);
+    metal_buffer_release(out);
+    metal_buffer_release(C_cpu);
+}
+static void run_metal_softmax(metal_softmax_func_t func, const char* name, int n) {
+    metal_buffer_t in;
+    metal_buffer_t out;
+    metal_buffer_t C_cpu;
+
+    metal_device_t device;
+    metal_library_t library;
+    metal_function_t function;
+    metal_command_queue_t command_queue;
+    metal_command_buffer_t command_buffer;
+
+
+    if(create_metal(&device, &library, &function, &command_queue, name) != gemm_success) {
+        printf("failed to create Metal device\n");
+        return;
+    }
+
+    init_softmax_buffer(&device, &in, &out, &C_cpu, n);
+
+    if(metal_command_buffer_create(&command_queue, &command_buffer) != gemm_success) {
+        release_metal(&device, &library, &function, &command_queue);
+        printf("failed to create Metal command buffer\n");
+        return;
+    }
+
+    double cost_sec = 0;
+    for(int i = 0; i < BENCH_MARK_COUNT; i++) {
+        func(&command_buffer, &function, n, &in, &out);
+    }
+    metal_command_buffer_commit(&command_buffer);
+    metal_command_buffer_wait_completion(&command_buffer, &cost_sec);
+    metal_command_buffer_release(&command_buffer);
+
+    double avg_time = cost_sec / (BENCH_MARK_COUNT);
+    printf("%s: %.3f ms\n", name, avg_time * 1000.0); 
+
+     cpu_softmax((float*)in.ptr, (float*)C_cpu.ptr, n);
+     validate_gemm_result((float*)out.ptr, (float*)C_cpu.ptr, n);
+
+    release_softmax_buffer(&in, &out, &C_cpu);
+    release_metal(&device, &library, &function, &command_queue);
+}
+
+static void print_f32(float* ptr, int n) {
+    for(int i = 0; i < n; i++){
+        printf("%f ", ptr[i]);
+    }
+    printf("\n");
+}
+
+void bench_mark_cpu_softmax(int n) {
+   metal_buffer_t in;
+   metal_buffer_t out;
+   metal_buffer_t C_cpu;
+
+   metal_device_t device;
+    if(metal_device_create(&device) != gemm_success) {
+        printf("failed to create Metal device\n");
+        return;
+    }
+
+   init_softmax_buffer(&device, &in, &out, &C_cpu, n);
+
+   uint64_t start = get_time_us();
+   for(int i = 0; i < 1000; i++) {
+        cpu_softmax((float*)in.ptr, (float*)out.ptr, n);
+   }
+   uint64_t end = get_time_us();
+   printf("cpu softmax time: %f ms\n", (end - start) / 1000.0f);
+
+   release_softmax_buffer(&in, &out, &C_cpu);
+   metal_device_release(&device);
+}
+
+void bench_mark_online_softmax(int n) {
+   metal_buffer_t in;
+   metal_buffer_t out;
+   metal_buffer_t C_cpu;
+   metal_device_t device;
+   
+    if(metal_device_create(&device) != gemm_success) {
+        printf("failed to create Metal device\n");
+        return;
+    }
+
+   init_softmax_buffer(&device, &in, &out, &C_cpu, n);
+
+   uint64_t start = get_time_us();
+   for(int i = 0; i < 1000; i++) {
+        cpu_online_softmax((float*)in.ptr, (float*)out.ptr, n);
+   }
+   uint64_t end = get_time_us();
+   printf("online softmax time: %f ms\n", (end - start) / 1000.0f);
+   
+   release_softmax_buffer(&in, &out, &C_cpu);
+   metal_device_release(&device);
+}
+
+static enum gemm_status metal_softmax_v1(metal_command_buffer_t* command_buffer, metal_function_t* function, int n, metal_buffer_t* in, metal_buffer_t* out) {
+    if (command_buffer->object == NULL || function->pipeline_state_object == NULL) {
+        return gemm_invalid_state;
+    }
+    softmax_v1_args_t args = {
+        .n = n,
+    };
+
+    size_t threadgroup_size = gemm_min(SOFTMAX_BLOCK_SIZE, function->max_threadgroup_threads);
+    size_t num_threadgroups = 1;
+
+    return metal_command_buffer_encode_launch_kernel(command_buffer, function, 
+        threadgroup_size, 1, 1,
+        num_threadgroups, 1, 1, 
+        sizeof(args), &args, 2, 
+        (const metal_buffer_t*[]){in, out}, 
+        (const size_t[]){0, 0});
+}
+
+void bench_mark_metal_softmax_v1(int n) {
+    run_metal_softmax(metal_softmax_v1, "metal_softmax_v1", n);
+}
+
+static enum gemm_status metal_softmax_v2(metal_command_buffer_t* command_buffer, metal_function_t* function, int n, metal_buffer_t* in, metal_buffer_t* out) {
+    if (command_buffer->object == NULL || function->pipeline_state_object == NULL) {
+        return gemm_invalid_state;
+    }
+    softmax_v2_args_t args = {
+        .n = n,
+    };
+
+    size_t threadgroup_size = gemm_min(WARPSIZE, function->max_threadgroup_threads);
+    size_t num_threadgroups = 1;
+
+    return metal_command_buffer_encode_launch_kernel(command_buffer, function, 
+        threadgroup_size, 1, 1,
+        num_threadgroups, 1, 1, 
+        sizeof(args), &args, 2, 
+        (const metal_buffer_t*[]){in, out}, 
+        (const size_t[]){0, 0});
+}
+
+void bench_mark_metal_softmax_v2(int n) {
+    run_metal_softmax(metal_softmax_v2, "metal_softmax_v2", n);
+}
+
+static enum gemm_status metal_softmax_v3(metal_command_buffer_t* command_buffer, metal_function_t* function, int n, metal_buffer_t* in, metal_buffer_t* out) {
+    if (command_buffer->object == NULL || function->pipeline_state_object == NULL) {
+        return gemm_invalid_state;
+    }
+    softmax_v3_args_t args = {
+        .n = n,
+    };
+
+    size_t threadgroup_size = gemm_min(SOFTMAX_V3_BLOCK_SIZE, function->max_threadgroup_threads);
+    size_t num_threadgroups = 1;
+
+    return metal_command_buffer_encode_launch_kernel(command_buffer, function, 
+        threadgroup_size, 1, 1,
+        num_threadgroups, 1, 1, 
+        sizeof(args), &args, 2, 
+        (const metal_buffer_t*[]){in, out}, 
+        (const size_t[]){0, 0});
+}
+
+void bench_mark_metal_softmax_v3(int n) {
+    run_metal_softmax(metal_softmax_v3, "metal_softmax_v3", n);
+}
+
+static enum gemm_status metal_softmax_online(metal_command_buffer_t* command_buffer, metal_function_t* function, int n, metal_buffer_t* in, metal_buffer_t* out) {
+    if (command_buffer->object == NULL || function->pipeline_state_object == NULL) {
+        return gemm_invalid_state;
+    }
+    softmax_v4_args_t args = {
+        .n = n,
+    };
+
+    size_t threadgroup_size = gemm_min(WARPSIZE, function->max_threadgroup_threads);
+    size_t num_threadgroups = 1;
+
+    return metal_command_buffer_encode_launch_kernel(command_buffer, function, 
+        threadgroup_size, 1, 1,
+        num_threadgroups, 1, 1, 
+        sizeof(args), &args, 2, 
+        (const metal_buffer_t*[]){in, out}, 
+        (const size_t[]){0, 0});
+}
+
+void bench_mark_metal_softmax_online(int n) {
+    run_metal_softmax(metal_softmax_online, "metal_softmax_online", n);
+}
+
+static enum gemm_status metal_softmax_online_v2(metal_command_buffer_t* command_buffer, metal_function_t* function, int n, metal_buffer_t* in, metal_buffer_t* out) {
+    if (command_buffer->object == NULL || function->pipeline_state_object == NULL) {
+        return gemm_invalid_state;
+    }
+    softmax_v5_args_t args = {
+        .n = n,
+    };
+
+    size_t threadgroup_size = gemm_min(SOFTMAX_V3_BLOCK_SIZE, function->max_threadgroup_threads);
+    size_t num_threadgroups = 1;
+
+    return metal_command_buffer_encode_launch_kernel(command_buffer, function, 
+        threadgroup_size, 1, 1,
+        num_threadgroups, 1, 1, 
+        sizeof(args), &args, 2, 
+        (const metal_buffer_t*[]){in, out}, 
+        (const size_t[]){0, 0});
+}
+
+void bench_mark_metal_softmax_online_v2(int n) {
+    run_metal_softmax(metal_softmax_online_v2, "metal_softmax_online_v2", n);
 }
