@@ -42,7 +42,7 @@ add_custom_target(build_metallib ALL
 add_library(metal STATIC ${CMAKE_CURRENT_SOURCE_DIR}/metal.m)
 target_link_libraries(metal PRIVATE ${FOUNDATION_FRAMEWORK} ${METAL_FRAMEWORK} ${IOKIT_FRAMEWORK} ${MPS_FRAMEWORK})
     
-add_executable(matmul ${CMAKE_CURRENT_SOURCE_DIR}/kernel.c ${CMAKE_CURRENT_SOURCE_DIR}/main.c ${CMAKE_CURRENT_SOURCE_DIR}/matmul.c)
+add_executable(matmul ${CMAKE_CURRENT_SOURCE_DIR}/kernel.c ${CMAKE_CURRENT_SOURCE_DIR}/main.c ${CMAKE_CURRENT_SOURCE_DIR}/matmul.c ${CMAKE_CURRENT_SOURCE_DIR}/common.c)
 target_link_libraries(matmul PRIVATE metal ${MPS_FRAMEWORK})
 
 # 如果找到OpenMP，添加编译选项和链接库
